@@ -1,45 +1,40 @@
-name: Backup and Restore Database
+name: Backup Database
 
 on:
   push:
     branches:
-      - master
+      - main  # o la rama que estés utilizando
 
 jobs:
-  backup-and-restore:
-    runs-on: ubuntu-latest
-    
+  backup:
+    runs-on: ubuntu-latest  # Usar un sistema basado en Linux en GitHub Actions
+
     steps:
-      - name: Checkout Code
+      # Paso 1: Checkout del código
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Set up Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
+      # Paso 2: Set up Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
 
-      - name: Start Docker containers
+      # Paso 3: Crear contenedor MySQL y realizar el backup
+      - name: Create MySQL container and backup database
         run: |
-          docker start workbench-contenedor || docker run -d --name workbench-contenedor mysql:5.7
-          docker start workbench-backup || docker run -d --name workbench-backup mysql:5.7
-
-      - name: Create database backup
-        env:
-          MYSQL_CONTENEDOR_PASSWORD: ${{ secrets.MYSQL_CONTENEDOR_PASSWORD }}
-        run: |
+          # Crear contenedor con base de datos "agencia"
+          docker run --name workbench-contenedor -e MYSQL_ROOT_PASSWORD=$MYSQL_CONTENEDOR_PASSWORD -d mysql:latest
+          
+          # Crear el backup de la base de datos "agencia"
           docker exec workbench-contenedor mysqldump -u root -p$MYSQL_CONTENEDOR_PASSWORD agencia > backup.sql
+          
+          # Copiar el archivo de backup a la máquina local del flujo de trabajo
+          docker cp workbench-contenedor:/backup.sql .
 
-      - name: Copy backup to backup container
+      # Paso 4: Crear otro contenedor MySQL y restaurar la base de datos
+      - name: Restore backup to another MySQL container
         run: |
-          docker cp backup.sql workbench-backup:/backup.sql
-
-      - name: Restore backup to agencia_2
-        env:
-          MYSQL_BACKUP_PASSWORD: ${{ secrets.MYSQL_BACKUP_PASSWORD }}
-        run: |
-          docker exec workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD -e "CREATE DATABASE IF NOT EXISTS agencia_2;"
-          docker exec workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD agencia_2 < /backup.sql
-
-      - name: Clean up backup
-        run: |
-          docker exec workbench-backup rm /backup.sql
+          # Crear contenedor de respaldo "workbench-backup"
+          docker run --name workbench-backup -e MYSQL_ROOT_PASSWORD=$MYSQL_BACKUP_PASSWORD -d mysql:latest
+          
+          # Restaurar la base de datos "agencia_2"
+          docker exec -i workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD agencia_2 < backup.sql
