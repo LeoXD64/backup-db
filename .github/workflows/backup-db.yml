@@ -14,27 +14,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      # Paso 2: Set up Docker
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      # Paso 3: Crear contenedor MySQL y realizar el backup
-      - name: Create MySQL container and backup database
+      # Paso 2: Conectarse al contenedor 'workbench-contenedor' y hacer el backup
+      - name: Backup Database from workbench-contenedor
         run: |
-          # Crear contenedor con base de datos "agencia"
-          docker run --name workbench-contenedor -e MYSQL_ROOT_PASSWORD=$MYSQL_CONTENEDOR_PASSWORD -d mysql:latest
-          
-          # Crear el backup de la base de datos "agencia"
+          # Copiar el backup de la base de datos "agencia" desde el contenedor
           docker exec workbench-contenedor mysqldump -u root -p$MYSQL_CONTENEDOR_PASSWORD agencia > backup.sql
-          
-          # Copiar el archivo de backup a la máquina local del flujo de trabajo
-          docker cp workbench-contenedor:/backup.sql .
 
-      # Paso 4: Crear otro contenedor MySQL y restaurar la base de datos
-      - name: Restore backup to another MySQL container
+      # Paso 3: Conectarse al contenedor 'workbench-backup' y restaurar la base de datos
+      - name: Restore Backup to workbench-backup
         run: |
-          # Crear contenedor de respaldo "workbench-backup"
-          docker run --name workbench-backup -e MYSQL_ROOT_PASSWORD=$MYSQL_BACKUP_PASSWORD -d mysql:latest
-          
-          # Restaurar la base de datos "agencia_2"
+          # Restaurar el backup en la base de datos "agencia_2" dentro del contenedor de backup
           docker exec -i workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD agencia_2 < backup.sql
