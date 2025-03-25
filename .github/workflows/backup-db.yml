@@ -1,0 +1,45 @@
+name: Backup and Restore Database
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  backup-and-restore:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: Set up Docker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+
+      - name: Start Docker containers
+        run: |
+          docker start workbench-contenedor || docker run -d --name workbench-contenedor mysql:5.7
+          docker start workbench-backup || docker run -d --name workbench-backup mysql:5.7
+
+      - name: Create database backup
+        env:
+          MYSQL_CONTENEDOR_PASSWORD: ${{ secrets.MYSQL_CONTENEDOR_PASSWORD }}
+        run: |
+          docker exec workbench-contenedor mysqldump -u root -p$MYSQL_CONTENEDOR_PASSWORD agencia > backup.sql
+
+      - name: Copy backup to backup container
+        run: |
+          docker cp backup.sql workbench-backup:/backup.sql
+
+      - name: Restore backup to agencia_2
+        env:
+          MYSQL_BACKUP_PASSWORD: ${{ secrets.MYSQL_BACKUP_PASSWORD }}
+        run: |
+          docker exec workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD -e "CREATE DATABASE IF NOT EXISTS agencia_2;"
+          docker exec workbench-backup mysql -u root -p$MYSQL_BACKUP_PASSWORD agencia_2 < /backup.sql
+
+      - name: Clean up backup
+        run: |
+          docker exec workbench-backup rm /backup.sql
